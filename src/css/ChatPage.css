@@ -1,0 +1,74 @@
+.ChatPage {
+    display: flex;
+    flex-direction: column; 
+    height: 100vh; 
+    width: 100%;
+    
+    font-family: "Poppins", sans-serif;
+  }
+  
+  .chatContent {
+    display: flex; 
+    overflow: hidden;
+    width: 100%;
+    flex: 1;
+    height: calc(100vh - 83px);
+    
+  }
+  
+  .ChatPage > .chatContent {
+    gap: 20px; 
+  }
+  
+  
+  
+  
+  
+  .SendMessageComponent {
+    gap: 0px;
+    border-radius: 0px;
+    position: fixed;
+    border-top: 2.5px solid black;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    z-index: 10;
+    height: 83px;
+    margin-left: 272px; /* Keeps space for the left-side container */
+    bottom: -13px;
+    max-width: calc(100vw - 272px); /* Ensures the component takes full width minus 272px */
+    
+  }
+  
+  .SendMessageComponent textarea {
+    border-radius: 0;
+    background-color: rgb(32, 32, 32);
+    color: white;
+    border: none;
+    flex-grow: 1; /* Makes textarea take up available space */
+    resize: none;
+    width: 100vw;
+    height: 100%; /* Ensures the textarea takes the full height of the container */
+    z-index: 1;
+    padding-right: 70px;
+    font-size: 30px;
+    padding-left: 10px;
+    padding-top: 4px;
+    outline: none;
+  }
+  
+  .sendMessageButton {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    
+    z-index: 1;
+    position: fixed;
+    right: 20px;
+    bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  
