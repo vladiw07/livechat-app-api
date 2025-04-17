@@ -11,8 +11,8 @@ const { Server } = require('socket.io');
 // Create an express application
 const app = express();
 const allowedOrigins = [
-  // 'http://localhost:3000', // Dev frontend
-  // 'https://livechat-app-frontend.vercel.app' // Deployed frontend
+  'http://localhost:3000', // Dev frontend
+  'https://livechat-app.onrender.com' // Deployed frontend
 ];
 
 const server = http.createServer(app);
