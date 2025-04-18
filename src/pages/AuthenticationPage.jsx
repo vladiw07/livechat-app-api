@@ -22,7 +22,7 @@
     const handleRegister = (e) => {
       e.preventDefault();
 
-      fetch('http://localhost:5000/create-user', {
+      fetch(`${API_BASE_URL}/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -45,7 +45,7 @@
     const handleLogin = (e) => {
       e.preventDefault();
     
-      fetch('http://localhost:5000/login', {
+      fetch(`${API_BASE_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
