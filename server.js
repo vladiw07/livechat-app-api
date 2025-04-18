@@ -1,11 +1,9 @@
 const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
-const bcrypt = require('bcryptjs'); // Import bcryptjs
+const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const http = require('http');
-
-
 const { Server } = require('socket.io');
 
 // Create an express application
@@ -15,35 +13,54 @@ const allowedOrigins = [
   'https://livechat-app.onrender.com' // Deployed frontend
 ];
 
+// Create HTTP server
 const server = http.createServer(app);
-const io = require('socket.io')(server, {
+
+// Set up Socket.IO
+const io = new Server(server, {
   cors: {
-    origin: allowedOrigins, // Your React app's URL
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     allowedHeaders: ["my-custom-header"],
     credentials: true
   }
 });
 
-
-
+// Configure CORS - only need this once
 app.use(cors({
-  origin: allowedOrigins, // Your frontend URL
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 
+// Middleware to parse JSON request bodies
+app.use(bodyParser.json());
 
+// MySQL connection setup - fixed for Render
+const db = mysql.createConnection({
+  host: 'db-host.render.com', // Just the hostname
+  user: 'root',
+  password: 'azsamnoob44',
+  database: 'realtime_chat',
+  port: 3306,
+  ssl: {
+    rejectUnauthorized: true
+  }
+});
 
-
-
-
-// Handle 'send_message' event
-// Consolidated Socket.IO implementation
+// Connect to the database
+db.connect((err) => {
+  if (err) {
+    console.error('Error connecting to the database: ', err);
+    return;
+  }
+  console.log('Connected to the database!');
+});
 
 // Keep track of user connections
 const userSocketMap = {}; // To store user-email to socketId mappings
 
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log(`New socket connection: ${socket.id}`);
   let userEmail = null;
@@ -87,19 +104,30 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle 'mark_message_seen' event
+  // Create a cache for mark_message_seen logs
+  if (!global.markSeenLogCache) {
+    global.markSeenLogCache = {};
+  }
+
   // Handle 'mark_message_seen' event
   socket.on('mark_message_seen', (data) => {
-    console.log('Received mark_message_seen event:', data);
-    
     if (!data || !data.messageId || !data.senderId || !data.recipientId) {
       console.warn('Invalid data for mark_message_seen event:', data);
       return;
     }
     
+    // Only log once per minute per message ID
+    const cacheKey = `${data.messageId}`;
+    const now = Date.now();
+    const shouldLog = !global.markSeenLogCache[cacheKey] || (now - global.markSeenLogCache[cacheKey] > 60000);
+    
+    if (shouldLog) {
+      console.log('Received mark_message_seen event:', data);
+      global.markSeenLogCache[cacheKey] = now;
+    }
+    
     // Update the message status in the database
     const updateQuery = 'UPDATE messages SET seen = 1 WHERE message_id = ?';
-    console.log('Executing query:', updateQuery, 'with params:', [data.messageId]);
     
     db.query(updateQuery, [data.messageId], (updateErr, updateResult) => {
       if (updateErr) {
@@ -107,28 +135,30 @@ io.on('connection', (socket) => {
         return;
       }
       
-      console.log(`Updated seen status for message ${data.messageId}. Affected rows: ${updateResult.affectedRows}`);
-      
       // If the update was successful, notify the original sender
       if (updateResult.affectedRows > 0) {
+        if (shouldLog) {
+          console.log(`Updated seen status for message ${data.messageId}`);
+        }
+        
         // Find the socket ID of the original sender using their email
         const senderSocketId = userSocketMap[data.senderId];
         
-        console.log('Looking for socket ID for sender:', data.senderId);
-        console.log('userSocketMap:', userSocketMap);
-        console.log('Found socket ID:', senderSocketId);
-        
         if (senderSocketId) {
-          console.log(`Notifying sender ${data.senderId} that their message was seen`);
-          console.log('Emitting mark_message_seen event with data:', data);
+          if (shouldLog) {
+            console.log(`Notifying sender ${data.senderId} that their message was seen`);
+          }
           
           io.to(senderSocketId).emit('mark_message_seen', data);
-          console.log('Event emitted successfully');
         } else {
-          console.log(`Sender ${data.senderId} not connected, cannot notify about seen message`);
+          if (shouldLog) {
+            console.log(`Sender ${data.senderId} not connected, cannot notify about seen message`);
+          }
         }
       } else {
-        console.log(`Message ${data.messageId} not found or already marked as seen`);
+        if (shouldLog) {
+          console.log(`Message ${data.messageId} not found or already marked as seen`);
+        }
       }
     });
   });
@@ -144,39 +174,7 @@ io.on('connection', (socket) => {
   });
 });
 
-
-
-
-
-
-
-app.use(cors({
-  origin: '*',  // Allow all origins (OK for dev)
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
-}));
-
-
-// Middleware to parse JSON request bodies
-app.use(bodyParser.json());
-
-// MySQL connection setup
-const db = mysql.createConnection({
-  host: 'mysql://root:azsamnoob44@db-host.render.com:3306/realtime_chat',
-  user: 'root', // Replace with your MySQL username
-  password: 'azsamnoob44', // Replace with your MySQL password
-  database: 'realtime_chat'
-});
-
-// Connect to the database
-db.connect((err) => {
-  if (err) {
-    console.error('Error connecting to the database: ', err);
-    return;
-  }
-  console.log('Connected to the database!');
-});
-
+// REST API endpoints
 app.post('/mark-message-seen', (req, res) => {
   const { messageId } = req.body;
   
@@ -198,6 +196,7 @@ app.post('/mark-message-seen', (req, res) => {
     return res.json({ message: 'Message marked as seen', messageId });
   });
 });
+
 // Define the route to create a new user (register)
 app.post('/create-user', (req, res) => {
   const { username, email, password } = req.body;
@@ -272,8 +271,7 @@ app.post('/login', (req, res) => {
   });
 });
 
-
-// Route to send a friend request (using sender's email and receiver's username)
+// Route to send a friend request
 app.post('/send-friend-request', (req, res) => {
   const { senderEmail, receiverUsername } = req.body;
 
@@ -310,7 +308,7 @@ app.post('/send-friend-request', (req, res) => {
 
       const receiverId = receiverResult[0].user_id;
 
-      // **Prevent self-friend requests**
+      // Prevent self-friend requests
       if (senderId === receiverId) {
         return res.status(400).json({ message: 'You cannot send a friend request to yourself.' });
       }
@@ -342,9 +340,7 @@ app.post('/send-friend-request', (req, res) => {
   });
 });
 
-
-
-// Route to get all incoming friend requests for a user based on their email
+// Route to get all incoming friend requests for a user
 app.post('/incoming-friend-requests', (req, res) => {
   const { email } = req.body;
 
@@ -367,8 +363,7 @@ app.post('/incoming-friend-requests', (req, res) => {
 
     const userId = result[0].user_id;
 
-    // Query to fetch all incoming friend requests for the user (where they are the receiver)
-    // We now join the `users` table to get the sender's username
+    // Query to fetch all incoming friend requests for the user
     const checkRequestsQuery = `
       SELECT 
         fr.*, u.username AS senderUsername
@@ -399,9 +394,9 @@ app.post('/incoming-friend-requests', (req, res) => {
   });
 });
 
+// Accept friend request
 app.post('/accept-friend-request', (req, res) => {
   const { email, requestId } = req.body;
-  console.log('Request body:', req.body);
 
   // Basic validation
   if (!email || !requestId) {
@@ -434,8 +429,6 @@ app.post('/accept-friend-request', (req, res) => {
         return res.status(404).json({ message: 'Friend request not found or not for this user.' });
       }
 
-      console.log('Friend request found:', requestResult);
-
       // Update the status of the friend request to "accepted"
       const updateQuery = 'UPDATE friend_requests SET status = ? WHERE request_id = ?';
       db.query(updateQuery, ['accepted', requestId], (err, updateResult) => {
@@ -444,7 +437,7 @@ app.post('/accept-friend-request', (req, res) => {
           return res.status(500).json({ message: 'Error accepting friend request.' });
         }
 
-        // Insert the friendship into the "friends" table (both directions)
+        // Insert the friendship into the "friends" table
         const insertFriendQuery = `
           INSERT INTO friends (user_id_1, user_id_2) 
           SELECT ?, ? 
@@ -480,10 +473,7 @@ app.post('/accept-friend-request', (req, res) => {
   });
 });
 
-
-
-
-
+// Reject friend request
 app.post('/reject-friend-request', (req, res) => {
   const { email, requestId } = req.body;
 
@@ -506,7 +496,7 @@ app.post('/reject-friend-request', (req, res) => {
 
     const userId = result[0].user_id;
 
-    // Query to get the friend request details (using `request_id`)
+    // Query to get the friend request details
     const requestQuery = 'SELECT * FROM friend_requests WHERE request_id = ? AND receiver_id = ?';
     db.query(requestQuery, [requestId, userId], (err, requestResult) => {
       if (err) {
@@ -518,7 +508,7 @@ app.post('/reject-friend-request', (req, res) => {
         return res.status(404).json({ message: 'Friend request not found or not for this user.' });
       }
 
-      // Delete the friend request (or set status to 'rejected')
+      // Delete the friend request
       const deleteQuery = 'DELETE FROM friend_requests WHERE request_id = ?';
       db.query(deleteQuery, [requestId], (err, deleteResult) => {
         if (err) {
@@ -532,8 +522,7 @@ app.post('/reject-friend-request', (req, res) => {
   });
 });
 
-
-
+// Get friends
 app.post('/get-friends', (req, res) => {
   const { email } = req.body;
 
@@ -582,7 +571,7 @@ app.post('/get-friends', (req, res) => {
   });
 });
 
-
+// Get username
 app.post('/get-username', (req, res) => {
   const { email } = req.body;
 
@@ -605,13 +594,12 @@ app.post('/get-username', (req, res) => {
     
     return res.status(200).json({ 
       message: 'Username retrieved successfully.', 
-      
       username: result[0].username 
     });
   });
 });
 
-
+// Create chat
 app.post('/create-chat', (req, res) => {
   const { email, otherUserId } = req.body;
 
@@ -664,8 +652,7 @@ app.post('/create-chat', (req, res) => {
   });
 });
 
-
-
+// Send message
 app.post('/send-message', (req, res) => {
   const { email, otherUserId, message } = req.body;
 
@@ -716,9 +703,7 @@ app.post('/send-message', (req, res) => {
   });
 });
 
-
-
-
+// Get messages
 app.post('/get-messages', (req, res) => {
   const { email, otherUserId } = req.body;
   
@@ -753,10 +738,6 @@ app.post('/get-messages', (req, res) => {
     
     const userId = userResults[0].user_id;
     
-    if (shouldLog) {
-      console.log(`Found user ID ${userId} for email ${email}`);
-    }
-    
     // Get the email of the other user
     const otherUserQuery = 'SELECT email FROM users WHERE user_id = ?';
     db.query(otherUserQuery, [otherUserId], (otherUserErr, otherUserResults) => {
@@ -766,10 +747,6 @@ app.post('/get-messages', (req, res) => {
       }
       
       const otherUserEmail = otherUserResults[0].email;
-      
-      if (shouldLog) {
-        console.log(`Found email ${otherUserEmail} for user ID ${otherUserId}`);
-      }
       
       // Find the chat between these two users
       const chatQuery = `
@@ -783,23 +760,12 @@ app.post('/get-messages', (req, res) => {
           return res.status(500).json({ message: 'Error finding chat' });
         }
         
-        if (shouldLog) {
-          console.log('Chat query results:', chatResults);
-        }
-        
         if (chatResults.length === 0) {
           // No chat exists yet
-          if (shouldLog) {
-            console.log('No chat found between these users');
-          }
           return res.json([]);
         }
         
         const chatId = chatResults[0].chat_id;
-        
-        if (shouldLog) {
-          console.log(`Found chat ID ${chatId}`);
-        }
         
         // Get messages for this chat, including the seen status
         const messagesQuery = `
@@ -817,10 +783,6 @@ app.post('/get-messages', (req, res) => {
             return res.status(500).json({ message: 'Error fetching messages' });
           }
           
-          if (shouldLog) {
-            console.log(`Found ${messagesResults.length} messages for chat ID ${chatId}`);
-          }
-          
           // Add recipient_email to each message
           const messages = messagesResults.map(msg => {
             return {
@@ -829,12 +791,6 @@ app.post('/get-messages', (req, res) => {
             };
           });
           
-          // Log messages with seen status
-          if (shouldLog) {
-            const seenMessages = messages.filter(msg => msg.seen === 1);
-            console.log(`Found ${seenMessages.length} messages with seen status`);
-          }
-          
           return res.json(messages);
         });
       });
@@ -842,12 +798,10 @@ app.post('/get-messages', (req, res) => {
   });
 });
 
-
-
-
+// Use environment variable for port or default to 5000
+const PORT = process.env.PORT || 5000;
 
 // Start the server
-
-server.listen(5000, () => {
-  console.log(`Server is running on http://localhost:5000`);
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
