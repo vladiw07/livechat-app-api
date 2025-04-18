@@ -1,11 +1,11 @@
 import { io } from 'socket.io-client';
 
 // Create a single socket instance
-const socket = io('http://localhost:5000', {
-  transports: ['websocket', 'polling'],  // Try WebSocket first, then fall back to polling
+const socket = io('https://livechat-app-api.onrender.com', {
+  transports: ['websocket', 'polling'],
   reconnection: true,
   reconnectionAttempts: 5,
-  reconnectionDelay: 1000
+  reconnectionDelay: 1000,
 });
 
 // Add event listeners for debugging
