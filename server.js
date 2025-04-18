@@ -162,7 +162,7 @@ app.use(bodyParser.json());
 
 // MySQL connection setup
 const db = mysql.createConnection({
-  host: 'localhost',
+  host: 'mysql://root:azsamnoob44@db-host.render.com:3306/realtime_chat',
   user: 'root', // Replace with your MySQL username
   password: 'azsamnoob44', // Replace with your MySQL password
   database: 'realtime_chat'
