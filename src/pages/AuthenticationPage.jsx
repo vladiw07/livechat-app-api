@@ -1,6 +1,7 @@
   import React, { useState } from 'react';
   import { useNavigate } from 'react-router-dom';
   import '../css/AuthenticationPage.css'; // Ensure you have this CSS file for styling
+  import { API_BASE_URL } from '../config.js';
 
   function AuthenticationPage() {
     const [authMode, setAuthMode] = useState('login');
